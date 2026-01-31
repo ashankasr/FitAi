@@ -63,7 +63,7 @@ class UserProfileRepository:
         print("[DEBUG] get_all_user_profiles called")
         try:
             print("[DEBUG] Executing Supabase query: table('user_profiles').select('*')")
-            response = self.supabase.table("user_profiles") \
+            response = self.supabase.table("ref_data") \
                 .select("*") \
                 .execute()
             

@@ -1,57 +1,54 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 import os
+import pathlib
+from contextlib import asynccontextmanager
+from typing import Optional
 from dotenv import load_dotenv
-from supabase import create_client
+from supabase import create_client, Client
 from profilingAgent import ProfilingAgent
 from user_repository import UserProfileRepository
 
-from contextlib import asynccontextmanager
-from typing import Optional
-from supabase import Client
+# Load environment variables at module import time
+# Use parent directory since .env is in fit-server/, not fit-server/src/
+env_path = pathlib.Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+# Get env vars at module level
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 # Global variables
-supabase: Optional[Client] = None
+supabase: Client = None
 user_repository: Optional[UserProfileRepository] = None
 profiling_agent: Optional[ProfilingAgent] = None
 
-import pathlib
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
     global supabase, user_repository, profiling_agent
     
-    # Load .env from parent directory (fit-server/.env, not fit-server/src/.env)
-    env_path = pathlib.Path(__file__).parent.parent / ".env"
-    print(f"[DEBUG] Loading .env from: {env_path}")
-    load_dotenv(dotenv_path=env_path)
-    
-    # Initialize Supabase client
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-    print(f"[DEBUG] SUPABASE_KEY: {SUPABASE_KEY}")
-    print(f"[DEBUG] SUPABASE_URL: {SUPABASE_URL}")
-
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("Warning: SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
-        supabase = None
-    else:
-        # Standard client for general use (respects RLS)
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
+        raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
+    
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print(f"✅ Connected to Supabase")
+    
     # Initialize Repository and Agent
-    if supabase:
-        user_repository = UserProfileRepository(supabase)
-        profiling_agent = ProfilingAgent(user_repository)
-        print("✅ Supabase and Agents initialized successfully")
-    else:
-        print("❌ Failed to initialize Supabase credentials")
-        # Ensure we don't crash on startup but endpoints might fail
+    user_repository = UserProfileRepository(supabase)
+    profiling_agent = ProfilingAgent(user_repository)
+    print("✅ Repository and Agents initialized successfully")
     
     yield
     print("👋 Shutting down...")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="FitAI Profiling Service",
+    description="User profiling service for FitAI",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
 
 class ProfilingRequest(BaseModel):
     user_id: str
