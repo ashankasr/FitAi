@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 
-from ..models import User, UserCreate, UserResponse
+from ..models import User, UserCreate, UserResponse, OnboardingData, OnboardingResponse
 from ..database import get_supabase_client, SupabaseClient
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -209,3 +209,103 @@ async def delete_user(user_id: int, db: SupabaseClient = Depends(get_db)) -> Non
         )
     
     db.table("users").delete().eq("id", user_id).execute()
+
+
+@router.post(
+    "/{user_id}/onboarding",
+    response_model=OnboardingResponse,
+    summary="Save Onboarding Data",
+    description="Save user onboarding profile data including demographics, activity level, medical history, goals, and constraints.",
+)
+async def save_onboarding_data(
+    user_id: int,
+    onboarding_data: OnboardingData,
+    db: SupabaseClient = Depends(get_db),
+) -> OnboardingResponse:
+    """
+    Save complete onboarding data for a user.
+    
+    Args:
+        user_id: The unique user identifier.
+        onboarding_data: Complete onboarding profile data.
+        
+    Returns:
+        Success response with user_id.
+        
+    Raises:
+        HTTPException: If user not found or save fails.
+    """
+    # Check if user exists
+    existing = db.table("users").select("id").eq("id", user_id).execute()
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with id {user_id} not found",
+        )
+    
+    # Prepare profile data
+    profile_data = {
+        "user_id": user_id,
+        # Demographics
+        "age": onboarding_data.demographics.age,
+        "sex": onboarding_data.demographics.sex,
+        "height_cm": onboarding_data.demographics.height,
+        "weight_kg": onboarding_data.demographics.weight,
+        "bmi": onboarding_data.demographics.bmi,
+        "body_fat_percentage": onboarding_data.demographics.body_fat_percentage,
+        # Activity Level
+        "structured_exercise_days": onboarding_data.activity_level.structured_exercise_days,
+        "daily_steps": onboarding_data.activity_level.daily_steps,
+        "sedentary_hours": onboarding_data.activity_level.sedentary_hours,
+        "last_regular_exercise": onboarding_data.activity_level.last_regular_exercise,
+        # Medical History
+        "has_cardiovascular_disease": onboarding_data.medical_history.has_cardiovascular_disease,
+        "has_chronic_conditions": onboarding_data.medical_history.has_diagnosed_chronic_conditions,
+        "chronic_conditions_details": onboarding_data.medical_history.chronic_conditions_details,
+        "has_back_pain": onboarding_data.medical_history.has_back_pain,
+        "back_pain_details": onboarding_data.medical_history.back_pain_details,
+        "taking_medications": onboarding_data.medical_history.taking_medications,
+        "medications_details": onboarding_data.medical_history.medications_details,
+        "family_history": onboarding_data.medical_history.family_history,
+        # Goals
+        "primary_goal": onboarding_data.goals.primary_goal,
+        "secondary_goals": onboarding_data.goals.secondary_goals,
+        "target_weight_loss_kg": onboarding_data.goals.target_weight_loss,
+        "target_timeframe_months": onboarding_data.goals.target_timeframe,
+        # Constraints
+        "available_days_per_week": onboarding_data.constraints.available_days_per_week,
+        "minutes_per_session": onboarding_data.constraints.minutes_per_session,
+        "has_gym_access": onboarding_data.constraints.has_gym_access,
+        "equipment_available": onboarding_data.constraints.equipment_available,
+        "dietary_restrictions": onboarding_data.constraints.dietary_restrictions,
+        "meals_per_day": onboarding_data.constraints.meals_per_day,
+        "sleep_hours_per_night": onboarding_data.constraints.sleep_hours_per_night,
+        "stress_level": onboarding_data.constraints.stress_level,
+        "additional_notes": onboarding_data.constraints.additional_notes,
+        # Timestamps
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    
+    try:
+        # Check if profile exists - update if so, insert if not
+        existing_profile = db.table("user_profiles").select("id").eq("user_id", user_id).execute()
+        
+        if existing_profile.data:
+            # Update existing profile
+            db.table("user_profiles").update(profile_data).eq("user_id", user_id).execute()
+        else:
+            # Insert new profile
+            db.table("user_profiles").insert(profile_data).execute()
+        
+        return OnboardingResponse(
+            success=True,
+            message="Onboarding data saved successfully",
+            user_id=user_id,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save onboarding data: {str(e)}",
+        )
+

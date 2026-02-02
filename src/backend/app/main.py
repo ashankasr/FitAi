@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import health_router, users_router
+from .routers import health_router, users_router, auth_router
 
 
 @asynccontextmanager
@@ -66,6 +66,7 @@ A fast, modern Python API built with FastAPI.
     # Include routers
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(users_router, prefix=settings.api_prefix)
+    app.include_router(auth_router, prefix=settings.api_prefix)
     
     # Root endpoint
     @app.get("/", tags=["Root"])
